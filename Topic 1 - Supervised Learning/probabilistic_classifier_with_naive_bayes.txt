@@ -1,0 +1,249 @@
+# %% [markdown]
+# # Probabilistic Classifier with Naive Bayes
+# 
+# ## By Wilson Peguero Rosario
+# 
+# A Naive Bayes classifier is not a single algorithm but uses multiple machine learning algorithms to classify data. It not only uses probability, but it is simple to implement. Some real-world examples of its use include filtering spam, classifying documents, text analysis, or medical diagnosis.
+# 
+# To perform sentiment analysis using a Naive Bayes algorithm, complete the following:
+# 
+# 1. Access the resources related to sentiment analysis, located in the topic Resources. Note: There are about 50 datasets that are suitable for use in a sentiment analysis task. For this part of the exercise, you must choose one of these datasets, provided it includes at least 10,000 instances.
+# 2. Ensure that the datasets are suitable for classification using this method.
+# 3. You may search for data in other repositories, such as Data.gov, Kaggle or Scikit Learn.
+# 
+# For your selected dataset, build a classification model as follows:
+# 
+# 1. Explain the dataset and the type of information you wish to gain by applying a classification method.
+# 2. Explain the Naive Bayes algorithm and how you will be using it in your analysis (list the steps, the intuition behind the mathematical representation, and address its assumptions).
+# 3. Import the necessary libraries, then read the dataset into a data frame and perform initial statistical exploration.
+# 4. Clean the data and address unusual phenomena (e.g., normalization, feature scaling, outliers); use illustrative diagrams and plots and explain them.
+# 5. Formulate two questions that can be answered by applying a classification method using the Naïve Bayes.
+# 6. Choose one of the Naive Bayes types of algorithms: Gaussian Naïve Bayes, Multinomial Naïve Bayes, or Bernoulli Naïve Bayes and explain your reasoning.
+# 7. Split the data into dependent and independent variables (or features and labels).
+# 8. Vectorize the text into numbers.
+# 9. Train the Naive Bayes classifier on the training set.
+# 10. Make classification predictions.
+# 11. Interpret the results in the context of the questions you asked.
+# 12. Validate your model using a confusion matrix, accuracy score, ROC-AUC curves, and k-fold cross validation. Then, explain the results.
+# 13. Include all mathematical formulas used and graphs representing the final outcomes.
+# 
+# Prepare a comprehensive technical report as a markdown document or Jupyter notebook, including all code, code comments, all outputs, plots, and analysis. Make sure the project documentation contains a) problem statement, b) algorithm of the solution, c) analysis of the findings, and d) deferences.
+# 
+# ## Solution
+
+# %% [markdown]
+# ### Problem Statement
+# 
+# Although Steam Reviews allows one to determine whether a game is good based on a user-based recommendation system, there is no guarantee that the users themselves are using the system appropriately. By using a data set containing prelabeled comments to determine whether the game review was positive or not will allow one to determine whether the review was positive. The data set utilized is based on Steam Reviews that are prelabeled as either recommended or not recommended. The features in use will be the year in which the comment was posted as well as the user suggestion to classify unlabeled reviews on certain titles. This algorithm will also use other factors related to the game itself (such as the publisher) to increase the accuracy of the SVM algorithm. This data set will allow Steam users to choose see the most popular titles and has the potential to show them which games had the most positive reviews based on the tags attached to the game title (i.e. the free to play game with the most positive reviews).
+
+# %%
+from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB, BernoulliNB
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from nltk.tokenize import word_tokenize
+from nltk.stem import SnowballStemmer
+from nltk.corpus import stopwords
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import nltk
+
+df__texts = pd.read_csv('steam_reviews/train.csv')
+df__game_info = pd.read_csv('steam_reviews/game_overview.csv')
+
+df__steam_info = pd.merge(df__texts, df__game_info, on="title")
+
+df__steam_info.head(10)
+
+# %% [markdown]
+# Now that we have the data set fully assembled one should be able to use some Exploratory analysis to see what features may supplement the explanatory variable that is the comments.
+# 
+# ### Exploratory Analysis
+# 
+# Before we begin the actual exploratory analysis, one must first convert the title, publisher as well as the developer of the game into it's categorical code value to better represent the features
+
+# %%
+df__steam_info['title'] = pd.Categorical(df__steam_info['title'])
+df__steam_info['developer'] = pd.Categorical(df__steam_info['developer'])
+df__steam_info['publisher'] = pd.Categorical(df__steam_info['title'])
+
+dict__cat = dict()
+for (col, data) in df__steam_info.iteritems():
+    ctype = df__steam_info[str(col)].dtype
+    print(f'the feature {col} is of type {ctype}')
+    if str(ctype) == 'category':
+        dict__cat[str(col)] = dict(enumerate(df__steam_info[str(col)].cat.categories))
+        df__steam_info[str(col)] = df__steam_info[str(col)].cat.codes
+
+
+# %% [markdown]
+# Now that we have replaced the explanatory variables with their respective categorical codes, now we can proceed to change the overview feature with the length of the overview itself rather than make the feature a categorical. After that we can create the 
+
+# %%
+df__steam_info['overview_length'] = df__steam_info['overview'].apply(
+    lambda value:len(value)
+    )
+
+corr_matrix = df__steam_info.corr()
+corr_matrix\
+    .style\
+        .background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1)\
+            .format(precision=2)
+
+# %% [markdown]
+# From what one can tell, it seems that there is no correlation at all between the features *title*, *developer*, and *publisher*. This indicates that the data set itself is not biased as it seems that there are not enough evidence to show that the data set has been influenced by any preference of a game developer or publisher.
+# 
+# In the end, using any other features may be detrimental to the model. Only the *user_suggestion* and the *user_review* features will be used for this occassion.
+
+# %%
+df = df__steam_info[
+    ['review_id', 'user_suggestion', 'user_review']
+    ]
+
+# %% [markdown]
+# ### Data Processing
+# 
+# Now that we have determined what features to use for the sentimental analysis. Let's work on some feature engineering to maximize the use of the user-review feature for sentimental analysis.
+# 
+# *We first begin by removing all special characters, change all letters to lowercase, remove stopwords (such as the, is, in, for, where, etc.), and finally remove words with the same stems (i.e. dislike and like have the same stem which is like)*.
+# 
+# We do the above by creating functions and using the apply function to the feature in pandas.
+
+# %%
+def remove_special(text:str) -> str:
+    rem = ''
+    for i in text:
+        if i.isalnum() == False and i != " ":
+            text = text.replace(i, '')
+    return text
+
+df['user_review'] = df['user_review']\
+    .apply(remove_special)
+
+df.loc[0, 'user_review']
+
+# %% [markdown]
+# Now that the special characters have been removed, let's change all of the letters to lowercase.
+
+# %%
+df['user_review'] = df['user_review']\
+    .apply(lambda text: text.lower())
+df.loc[0, 'user_review']
+
+# %% [markdown]
+# As shown above, further improvement was done upon the data set. Now all that is needed is to remove any stopwords within the text of the entire data set.
+
+# %%
+nltk.download('stopwords')
+nltk.download('punkt')
+def remove_stopwords(text:str) -> list:
+    stop_words = set(stopwords.words('english'))
+    words = word_tokenize(text)
+    return [w for w in words if w not in stop_words]
+
+df['user_review'] = df['user_review'].apply(remove_stopwords)
+df.loc[0, 'user_review']
+
+# %% [markdown]
+# Finally, let us remove words with the same stem and leave the unique stems through the use of the nltk SnowballStemmer algorithm.
+
+# %%
+def extract_stem(text:list) -> str:
+    ss = SnowballStemmer('english')
+    return " ".join([ss.stem(w) for w in text])
+
+df['user_review'] = df['user_review'].apply(extract_stem)
+
+df.loc[0, 'user_review']
+
+# %% [markdown]
+# Now that we have finished our data processing, it is time to create the Model.
+# 
+# ### Data Modeling
+# 
+# To create this model, we must first determine how one is going to vectorize the data (assign unique Ids based on length of the individual words and general location of the word). There are two ways of vecttorizing the *user_review* feature, one way is to simply count the number of times a word appears or to consider the overall documents by measuring how frequently certain words appears between documents as well. As the reviews may have similar words within them, the latter algorithm will be used.
+
+# %%
+# splitting the data into it's respective roles
+X = df['user_review']
+y = df['user_suggestion']
+
+tfidf = TfidfVectorizer(min_df = 2, max_df = 0.5, ngram_range = (1,2))
+text_count_matrix = tfidf.fit_transform(X)
+x_train, x_test, y_train, y_test = train_test_split(
+    text_count_matrix,
+    y,
+    test_size = 0.30,
+    random_state=2
+    )
+
+# %% [markdown]
+# Now that the data is organized and properly split into the correct proportions, let us create the model and train the data using the Multinomial Naive Bayes as it takes into account the frequency of certain features which we have engineered through the Vectorizer. Bernoulli Naive Bayes may be another alternative, but as it does not take into account the frequency of the features and counts only uniquely present values the same as absent, this may be detrimental.
+
+# %%
+mnb = MultinomialNB(alpha = 1.0, fit_prior = True)
+mnb.fit(x_train, y_train)
+y_pred = mnb.predict(x_test)
+
+ct01 = pd.crosstab(y_test, y_pred, rownames=['Actual'], colnames=['Predictions'])
+print(ct01)
+
+# %% [markdown]
+# ### Analysis of Results
+# 
+# Based on the results below, one is able to tell that the model has a relatively high accuraccy and precision. The most outstanding metric of this model seems to be the model's ability to recall (meaning it's ability to accurately classify true positives as true positives).
+
+# %%
+print(f'Accuracy                  :{accuracy_score(y_test, y_pred)}')
+print(f'error rate                :{1-accuracy_score(y_test,y_pred)}')
+print(f'precision                 :{precision_score(y_test,y_pred)}')
+print(f'recall                    :{recall_score(y_test, y_pred)}')
+
+
+# %% [markdown]
+# Further analysis indicates that the recall ability of the model is very good based on the roc curve (meaning that the when the True Positive Rate is 97.82%, the false positive rate is approximately 50%) and the Area Under the Curve tells one that the model's predictions are approximately 92.4% correct.
+
+# %%
+y_scores = mnb.predict_proba(x_test)
+y_test = np.array(list(y_test))
+
+crossval = cross_val_score(mnb, text_count_matrix, y, cv = KFold(n_splits=10))
+print(f'ROC Area Under Curve Score:{roc_auc_score(y_test, y_scores[:,1])}')
+
+fpr, tpr, thresholds = roc_curve(y_test, y_scores[:,1])
+
+plt.figure()
+lw = 2
+plt.plot(
+    fpr,
+    tpr,
+    color="darkorange",
+    lw=lw,
+    label="ROC curve"
+)
+plt.plot([0, 1], [0, 1], color="navy", lw=lw, linestyle="--")
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("Receiver Operating Characteristic of Sentimental Analysis")
+plt.legend(loc="lower right")
+plt.show()
+
+print(f'K-Fold Cross Validation   :{crossval.mean()}')
+
+# %% [markdown]
+# From the resulting mean K-Fold Cross Validation score, one is able to tell that the amount of data can help increase the accuracy of the model itself.
+
+# %% [markdown]
+# ### Sources:
+# 
+# 1. Chaudhury, Srijani. “Building a Sentiment Analyzer with Naive Bayes.” The Startup, 24 Nov. 2020, medium.com/swlh/building-a-sentiment-analyzer-with-naive-bayes-c96cc8aa52a5. Accessed 10 Feb. 2022.
+# 2. Google. “Classification: ROC Curve and AUC  |  Machine Learning Crash Course.” Google Developers, 2019, developers.google.com/machine-learning/crash-course/classification/roc-and-auc.
+# 3. “K-Fold Cross-Validation in Python Using SKLearn - AskPython.” AskPython, 12 Nov. 2020, www.askpython.com/python/examples/k-fold-cross-validation.
+# 4. “Receiver Operating Characteristic (ROC).” Scikit-Learn, scikit-learn.org/stable/auto_examples/model_selection/plot_roc.html. Accessed 10 Feb. 2022.
+# 5. SciKit-Learn. “3.1. Cross-Validation: Evaluating Estimator Performance — Scikit-Learn 0.21.3 Documentation.” Scikit-Learn.org, 2009, scikit-learn.org/stable/modules/cross_validation.html.
+# 6. Terribile, Matthew. “Understanding Cross Validation’s Purpose.” Medium, 29 July 2017, medium.com/@mtterribile/understanding-cross-validations-purpose-53490faf6a86.
+
+
