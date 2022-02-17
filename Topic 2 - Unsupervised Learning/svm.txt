@@ -1,0 +1,207 @@
+# %% [markdown]
+# # Support Vector Machines (SVM)
+# 
+# Another machine learning algorithm is the support vector machine (SVM). It provides resourceful predictions for complex real-word problems, reduces redundant information, and is ideal for smaller datasets. Some real-world examples of when SVMs can be used are bioinformatics, face recognition, speech recognition, or cancer detection.
+# 
+# To perform a classification using the support vector machine algorithm, complete the following:
+# 
+# 1. Access the "UCI Machine Learning Repository," located in the topic Resources. Note: There are about 120 data sets that are suitable for use in a classification task. For this part of the exercise, you must choose one of these datasets, provided it includes at least 10 attributes and 10,000 instances.
+# 2. Ensure that the datasets are suitable for classification using this method.
+# 3. You may search for data in other repositories, such as Data.gov, Kaggle or Scikit Learn.
+# 4. Examine the repository through which you accessed the dataset and discuss data management measures set in place, such as protecting the privacy of those accessing the site and protecting the intellectual property rights of the data owners/contributors.
+# 
+# 
+# For your selected dataset, build a classification model as follows:
+# 
+# 1. Explain the dataset and the type of information you wish to gain by applying a classification method.
+# 2. Explain what makes SVM algorithm very special and very different from most other machine learning algorithms. Explain how you will be using it in your analysis (list the steps, the intuition behind the mathematical representation, and address its assumptions).
+# 3. Explain the concepts: kernel, hyperplane, and decision boundary, and their role in SVM.
+# 4. Explain the concepts: maximum margin, support vectors, and maximum margin hyperplane, and their role in SVM.
+# 5. Import the necessary libraries, then read the dataset into a data frame and perform initial statistical exploration.
+# 6. Clean the data and address unusual phenomena (e.g., normalization, feature scaling, outliers); use illustrative diagrams and plots and explain them.
+# 7. Formulate two questions that can be answered by applying a classification method using the SVM
+# 8. Split the data into 80% training and 20% testing sets using the train test split class.
+# 9. Use a linear kernel to train the SVM classifier on the training set (e.g., fit the support vector regressor to the dataset). Explain the intuition behind each of the key mathematical steps.
+# 10. Explain the choice of the optimal hyperplane.
+# 11. Make classification predictions.
+# 12. Interpret the results in the context of the questions you asked.
+# 13. Validate your model using a confusion matrix, accuracy score, ROC-AUC curves, and k-fold cross validation. Then, explain the results.
+# 14. Include all mathematical formulas used and graphs representing the final outcomes.
+# 
+# 
+# Prepare a comprehensive technical report as a markdown document or Jupyter notebook, including all code, code comments, all outputs, plots, and analysis. Make sure the project documentation contains a) problem statement, b) algorithm of the solution, c) analysis of the findings, and d) references.
+
+# %% [markdown]
+# ### Problem Statement
+# 
+# Often times, going to a doctor to discuss which over the counter medicine may work best for a specific condition may be a daunting tasks. Not only would one require to spend an entire day dedicated to the doctor's visit, but the odds of having to ask for some time off to visit the doctor can be dreadful as that may mean in some cases that the usual paycheck will be lighter later on. Current review systems, may be incredibly difficult to ascertain in terms of how useful a drug may be, hence one may desire to use an app or web extension that rates the usefulness of the review based on it's description
+# 
+# - Contains Patient Reviews on specific drugs with related conditions.
+# - Contains a 10-star rating system to measure overall patient satisfaction.
+# - Useful for sentiment analysis of drug experience over multiple aspects of the drug
+# - Contains data from multiple sources (may be about bringing confidence about new drugs to patients).
+
+# %%
+import nltk
+import pandas as pd
+import datetime as dt
+from sklearn import svm
+from nltk.corpus import stopwords
+from nltk.stem import SnowballStemmer
+from nltk.tokenize import word_tokenize
+from sklearn.metrics import classification_report
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+
+df__drug_review__train = pd.read_csv('Topic 2 - Unsupervised Learning/drugsComTrain_raw.tsv', sep='\t')
+df__drug_review__test = pd.read_csv('Topic 2 - Unsupervised Learning/drugsComTest_raw.tsv', sep='\t')
+df__drug_review = pd.concat([df__drug_review__test,df__drug_review__train])
+df__drug_review.head(10)
+
+# %% [markdown]
+# Now that we have the data, one can begin cleaning the data set through Exploratory Analysis and Data Processing.
+# 
+# ### Exploratory Analysis
+# 
+# First, there are weights associated with the review which determines how useful the aforementioned comment was in comparison to other comments. there is also the date which can be utilized to determine the relevance of the review, the review and rating provided by the patient, the patient's condition and the name of the drug.
+# 
+# Before one engineers new features from the review itself, let's start by cleaning the data and formatting the features into more readable forms. This can be done by first changing the format of the date to a more readable format for the model.
+
+# %%
+df__drug_review.dropna(subset= ['review'])
+df__drug_review['date'] = pd.to_datetime(df__drug_review['date'])
+df__drug_review.head(10)
+
+# %% [markdown]
+# Now that the date is in a more readable format, it can be separated into year, month and day.
+
+# %%
+df__drug_review['Year'] = df__drug_review['date'].dt.year
+df__drug_review['Month'] = df__drug_review['date'].dt.month
+df__drug_review['Day'] = df__drug_review['date'].dt.day
+df__drug_review.head(10)
+
+# %% [markdown]
+# Next up is to change the *condition* feature and the *drugName* feature into categorical values.
+
+# %%
+df__drug_review['drugName'] = pd.Categorical(df__drug_review['drugName'])
+df__drug_review['condition'] = pd.Categorical(df__drug_review['condition'])
+
+dict__cat = dict()
+for (col, data) in df__drug_review.iteritems():
+    ctype = df__drug_review[str(col)].dtype
+    if str(ctype) == 'category':
+        dict__cat[str(col)] = dict(enumerate(df__drug_review[str(col)].cat.categories))
+        df__drug_review[str(col)] = df__drug_review[str(col)].cat.codes
+
+# %% [markdown]
+# Now that the dataset is completely assembled and well positioned. Let's view how the features correlate with each other (with the exception being the review as that will require some feature engineering).
+
+# %%
+corr_matrix = df__drug_review.corr()
+corr_matrix\
+    .style\
+        .background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1)\
+            .format(precision=2)
+
+# %% [markdown]
+# As can be observed above, there seems to be little to no correlation between any of the features and the response variable (usefulCount). In this case, let's transform the response variable *usefulCount* to see if the correlation can be improved.
+
+# %%
+df__drug_review['usefulCount_percent'] = df__drug_review['usefulCount'] / df__drug_review['usefulCount'].max()
+df__drug_review['usefulCount_percent'] = df__drug_review['usefulCount'].round()
+
+corr_matrix = df__drug_review.corr()
+corr_matrix\
+    .style\
+        .background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1)\
+            .format(precision=2)
+
+# %% [markdown]
+# From the new correlation matrix above, one is able to notice that by normalizing the *usefulCount* feature causes other numerical values such as rating and the year to remain the same in correlation with the response variable. For the sake of not allowing bias/misrepresentation of the data to be introduced into the model, only the review will be taken into consideration.
+# 
+# Now that the exploratory analysis of the data is finished, one can begin the data processing portion.
+# 
+# ### Data Processing
+# 
+# First the data must be split into it's X and y components (explanatory and response variable(s)) and the explanatory variables must then be cleaned and vectorized.
+
+# %%
+X = df__drug_review['review']
+y = df__drug_review['usefulCount']
+nltk.download('stopwords')
+nltk.download('punkt')
+
+def remove_special(text:str) -> str:
+    rem = ''
+    for i in text:
+        if i.isalnum() == False and i != " ":
+            text = text.replace(i, '')
+    return text
+
+X = X\
+    .apply(remove_special)
+
+X = X\
+    .apply(lambda text: text.lower())
+
+# %%
+def remove_stopwords(text:str) -> list:
+    stop_words = set(stopwords.words('english'))
+    words = word_tokenize(text)
+    return [w for w in words if w not in stop_words]
+
+X = X.apply(remove_stopwords)
+
+# %%
+def extract_stem(text:list) -> str:
+    ss = SnowballStemmer('english')
+    return " ".join([ss.stem(w) for w in text])
+
+X = X.apply(extract_stem)
+
+# %% [markdown]
+# Now that the explanatory variable has been cleaned, one can now vectorize the reviews and start the creation of the data model.
+# 
+# ### Data Modeling
+
+# %%
+tfidf = TfidfVectorizer(
+    min_df=5,
+    max_df=0.8,
+    sublinear_tf=True,
+    use_idf=True
+)
+
+text_count_matrix = tfidf.fit_transform(X)
+x_train, x_test, y_train, y_test = train_test_split(
+    text_count_matrix,
+    y,
+    test_size=0.30,
+    random_state=2
+)
+
+# %% [markdown]
+# Now to create and train the model
+
+# %% [markdown]
+# Now that the model has been created, predictions can be made and said predictions can then be utilized to draw conclusions about the efficiency of the model at classifying the reviews.
+
+# %%
+linear_classifier = svm.SVC(kernel='linear')
+linear_classifier.fit(x_train,y_train)
+
+# %%
+linear_predictions = linear_classifier.predict(x_test)
+classification_report(y_test, linear_predictions, labels = y.unique(), output_dict=True)
+
+# %% [markdown]
+# Source(s):
+# 
+# 1. Urooj, Wajiha. “Support Vector Machine in Python.” Edureka, 13 May 2020, medium.com/edureka/support-vector-machine-in-python-539dca55c26a. Accessed 17 Feb. 2022.
+# 2. Vasista Reddy. “Sentiment Analysis Using SVM.” Medium, Medium, 12 Nov. 2018, medium.com/@vasista/sentiment-analysis-using-svm-338d418e3ff1.
+# 
+
+
