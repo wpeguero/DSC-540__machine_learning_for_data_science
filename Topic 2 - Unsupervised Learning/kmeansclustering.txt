@@ -1,0 +1,148 @@
+# %% [markdown]
+# # Clustering with K-Means Algorithms
+# 
+# ### By Wilson Peguero Rosario
+# 
+# ## Assignment Description
+# Clustering is an unsupervised machine learning method used for grouping similar data in datasets so it can be easily understood and manipulated. One such algorithm, k-means, takes data and learns how it can be grouped. Some real-world examples of its use include fake news identification, fantasy league stat analysis, insurance fraud detection, or customer/market segmentation.
+# 
+# To perform a k-means analysis using the k-means algorithm, complete the following:
+# 
+# 1. Access the "UCI Machine Learning Repository," located in the topic Resources. Note: There are about 120 data sets that are suitable for use in a clustering task. For this part of the exercise, you must choose two of these datasets, provided they include at least 10 attributes and 10,000 instances.
+# 2. Ensure that the datasets are suitable for clustering using these methods.
+# 3. You may search for data in other repositories, such as Data.gov or Kaggle.
+# 
+# For your selected datasets, build a K-means clustering model.
+# 
+# 1. Start by choosing the number of clusters. Discuss how you would find the optimal number of clusters that best fits the dataset.
+# 2. Randomly pick k centroids "not necessarily from your dataset" (or points that will be the center of your clusters) in d-space. Try to make them near the data but different from one another.
+# 3. Assign each data point to the closest centroid. This will form your k clusters. Apply the Euclidian distance to form your clusters.
+# 4. Move the centroids to the average location of the data points assigned to it.
+# 5. Repeat the preceding two steps until the assignments do not change or change very little.
+# 
+# **Note**: A key objective is to minimize the variation within the clusters defined as **the sum of squared Euclidean distances between items and the corresponding centroid**.
+# 
+# 1. Explain the dataset and the type of information you wish to gain by applying a clustering method.
+# 2. Explain the k-means algorithm and how you will be using it in your analysis (list the steps, the intuition behind the mathematical representation, and address its assumptions).
+# 3. Import the necessary libraries, then read the dataset into a data frame and perform initial statistical exploration.
+# 4. Clean the data and address unusual phenomena (e.g., outliers); use illustrative diagrams and plots and explain them.
+# 5. Formulate two questions that can be answered by performing a clustering analysis using the k-means.
+# 6. Use the elbow method to find the optimal number of clusters for your chosen dataset. Justify your chosen (final) value of k.
+# 7. Perform k-means analysis. Explain the intuition behind each mathematical step.
+# 8. Interpret the results in the context of the questions you asked.
+# 9. Discuss how you minimized the variation within the clusters.
+# 10. Validate your model. Then, explain the results.
+# 11. Include all mathematical formulas used and graphs representing the final outcomes.
+# 
+# Prepare a comprehensive technical report as a markdown document or Jupyter notebook, including all code, code comments, all outputs, plots, and analysis. Make sure the project documentation contains a) problem statement, b) algorithm of the solution, c) analysis of the findings, and d) references.
+# 
+# #### Preliminary adjustments
+
+# %%
+import matplotlib.pyplot as plt
+
+plt.rcParams["figure.figsize"] = (15,15)
+
+# %% [markdown]
+# ## Solution
+# 
+# ### Problem Statement
+# 
+# Identifying animals in the wild can be very dangerous. Often times, cameras are left in key positions based on tracks and markers indicating that these dangerous animals pass through the area for the sake of obtaining a recording of these animals in the wild. When thinking of this a question comes to mid, what about the animals that are difficult to find and that one has a small amount of data on? If one is able to identify rare animals based on simply the sound of their call or cry, it would greatly assist biologists and environmentalists to identify new  or old species within an ecosystem. This data set (Frogs MFCCs dataset) introduces segmented calls for 4 families of frogs to identify.
+# 
+# ### Data Processing
+
+# %%
+import random
+import numpy as np
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.model_selection import cross_val_score, KFold
+from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve, silhouette_score
+
+df__frog_calls = pd.read_csv(r'frog_calls/Frogs_MFCCs.csv')
+df__frog_calls.describe()
+
+# %% [markdown]
+# Now that the data set has been loaded, one is able to view that majority of the features that can be utilized for classification are numerical in nature. Creating a matrix of scatterplots to view the association between the numerical values may assist in determining the relationship between the explanatory variables.
+
+# %%
+pd.plotting.scatter_matrix(df__frog_calls)
+
+# %% [markdown]
+# An observation of the correlation matrix allows one to view the following relationship between the explanatory variables.
+
+# %%
+corr_matrix = df__frog_calls.corr()
+corr_matrix\
+    .style\
+        .background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1)\
+            .format(precision=2)
+
+# %% [markdown]
+# The correlation matrix above makes it clearer that there is significant correlation between all of the Mel-frequency cepstral coefficients (MFCCs). According to the description within the data set this data is already normalized, meaning that it does not require further analysis and can be utilized in  its current condition.
+# 
+# The final condition is to remove the pre-existing label from the data set.
+
+# %%
+X = df__frog_calls.drop(['Family','Genus','Species','RecordID'], axis=1)
+
+
+# %% [markdown]
+# Now that the existing data labels have been removed, one should be able to move on to the data modelling phase.
+# 
+# ### Data Modeling
+# 
+# Before training the model, one must first find the ideal number of clusters, this can be done through the elbow method and confirmed through the silhouette method.
+
+# %%
+wcss = []
+sil_method = []
+for k in range(2,50):
+    model = KMeans(n_clusters=k)
+    model.fit_predict(X)
+    labels = model.labels_
+    wcss.append(model.inertia_)
+    sil_method.append(silhouette_score(X, labels, metric='euclidean'))
+
+plt.title('The Elbow Method')
+plt.xlabel('Number of Clusters')
+plt.ylabel('WCSS')
+plt.plot(range(2,50), wcss)
+
+# %%
+plt.title('The Silhouette Method')
+plt.xlabel('Number of Clusters')
+plt.ylabel('Silhouette Score')
+plt.plot(range(2,50), sil_method)
+
+# %% [markdown]
+# From the two graphs above, it seems that the ideal number of clusters falls between k=4 and k=15. In this case, following the silhouette method is best in this case as it accurately predicted that the data set contains segmented calls of 4 different families of frogs (NOTE: The silhouette method calculates k-1 clusters, meaning that when there number of clusters depicted on the x-axis is 3, in reality it is 3+1 which is 4).
+
+# %%
+kmm = KMeans(n_clusters=4)
+kmm.fit(X)
+prediction = kmm.predict(X)
+
+df__frog_calls["GROUP"] = prediction
+df__frog_calls['Family'] = pd.Categorical(df__frog_calls['Family'])
+dict__cat = dict(enumerate(df__frog_calls['Family'].cat.categories))
+df__frog_calls['Family'] = df__frog_calls['Family'].cat.codes
+
+# %% [markdown]
+# ### Model Evaluation
+# 
+# Now that the models are all in order, one is able to score and evaluate how well the model clustered the records.
+
+# %%
+print(f'Accuracy                  :{accuracy_score(df__frog_calls["Family"], df__frog_calls["GROUP"])}')
+print(f'error rate                :{1-accuracy_score(df__frog_calls["Family"],df__frog_calls["GROUP"])}')
+print(f'precision                 :{precision_score(df__frog_calls["Family"],df__frog_calls["GROUP"], average=None).mean()}')
+print(f'recall                    :{recall_score(df__frog_calls["Family"], df__frog_calls["GROUP"], average=None).mean()}')
+
+# %% [markdown]
+# From the observations above, one is able to tell clearly that the accuracy of the model at predicting which family the segmented call belongs. The precision and recall scores are also very low. Although this shows that the model is very bad at labeling the data in terms of the family that it belongs to, this does not mean that the model is completely useless. The model itself may be categorizing based on a nonrepresented property that may be more prolific within the data set than the family that the frogs belong in. To conclude, the questions that could have been answered had the data set accurately predicted the family that the frogs belonged to based on the segmented calls is can this algorithm accurately predict segmented calls of frogs within the area? Can the model be nondiscrimant when comparing male frogs vs female frogs?
+# 
+# Both questions had potential, but unfortunately, they cannot be answered as the clustering algorithm has clustered the data not based on family as one had first concluded via the Silhouette method, but rather that there is something more intrinsic within the data set that was utilized to create the clusters.
+
+
