@@ -1,0 +1,118 @@
+# %% [markdown]
+# # Association Rules Mining
+# 
+# ## By Wilson Peguero Rosario
+# 
+# 
+# Data mining is used to locate beneficial information by finding anomalies, patterns, or correlations within data. Association rules mining uses "if-then" statements to show the most important relationships between data. Some real-world examples of its use include medical diagnosis, purchasing patterns, consumer website usages, or content recommendation engines.
+# 
+# 
+# To perform association rules analysis/mining, complete the following:
+# 
+# 1. Access the "UCI Machine Learning Repository," located in the topic Resources. Note: There are about 120 data sets that are suitable for use in a clustering task. For this part of the exercise, you must choose two of these datasets, provided they include at least 10 attributes and 10,000 instances.
+# 2. Ensure that the data sets are suitable for clustering using this method.
+# 3. You may search for data in other repositories, such as Data.gov or Kaggle.
+# 
+# For your selected dataset, build a clustering model as follows:
+# 
+# 1. Explain the dataset and the type of information you wish to extract. Recall that the dataset must consist of transactions of the form If {x1, x2, …, xn} then {y1, y2, …, yk}.
+# 2. Explain the Apriori algorithm and how you will be using it in your analysis (list the steps, the intuition behind the mathematical representation, and address its assumptions).
+# 3. Identify the appropriate software packages.
+# 4. Preprocess the data, describe their characteristics, and visualize key characteristics like popular items and choices.
+# 5. Build the clustering model by implementing the Apriori algorithm.
+# 6. Run the model (make predictions).
+# 7. Display clustering results (quantitative and visual).
+# 8. Explain the meaning of each step in the context of the dataset.
+# 9. Interpret results and adjust your clustering.
+# 10. Validate the model, addressing support, confidence, lift, and conviction. Then, explain the results.
+# 
+# 
+# Prepare a comprehensive technical report as a markdown document or Jupyter notebook, including all code, code comments, all outputs, plots, and analysis. Make sure the project documentation contains a) problem statement, b) algorithm of the solution, c) analysis of the findings, and d) references.
+
+# %% [markdown]
+# ### Problem Statement
+# 
+# Data mining is a technique used for examining large data structures to find patterns, trends, and hidden insight that may not be found using simple statistical or query based techniques. This technique uses a multitude of algorithms to classify, segment, and correlate data to view any possible rules associated with the said data set. Using Data mining to discover any rules or conditions that determine whether an individual makes more than 50K is viable for informing the public on whether factors (such as sex, race, native-country, workclass, education, occupation, etc.).
+# 
+# The main goal of using this data set is to see if there are any patterns in society that impact how much one earns.
+# 
+# ### Solution
+# 
+# Before any Association Data Mining Learning can be done, one must first preprocess the data into a more readable format for computers.
+
+# %%
+import pandas as pd
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import apriori, association_rules
+
+cols = [
+    'age',
+    'workclass',
+    'fnlwght',
+    'education',
+    'education-num',
+    'marital-status',
+    'occupation',
+    'relationship',
+    'race',
+    'sex',
+    'capital-gain',
+    'capital-loss',
+    'hours-per-week',
+    'native-country',
+    'earning'
+]
+
+df1 = pd.read_csv('adult/adult.data', names=cols)
+df2 = pd.read_csv('adult/adult.test', names=cols)
+
+df__adult = pd.concat([df1, df2])
+df__adult.head(10)
+
+# %% [markdown]
+# Now that one has taken a look into the data set, one should be able to now create an itemset to develop the Association Rule Learning algorithm.
+# 
+# Before that, one must change the continuous numerical value to categorical.
+
+# %%
+df__adult['age range'] = pd.cut(df__adult['age'], range(df__adult['age'].min(), df__adult['age'].max(),5))
+df__adult['capital-gain range'] = pd.cut(df__adult['capital-gain'], range(df__adult['capital-gain'].min(), df__adult['capital-gain'].max(), 5000))
+df__adult['earning'] = df__adult['earning'].apply(lambda x: x.replace(".", ""))
+# This is commented out as the capital-loss is all blank
+# df__adult['capital-loss range'] = pd.cut(df__adult['capital-loss'], range(df__adult['capital-loss'].min(), df__adult['capital-loss'].max(), 5000))
+
+
+# %% [markdown]
+# Now that the desired columns are in place, one is able to further develop the data set into an itemset by going from a pandas dataframe to a list.
+
+# %%
+data = []
+for index, row in df__adult.iterrows():
+    data.append([str(row['age range']),str(row['education']),str(row['earning'])])
+
+# %%
+a = TransactionEncoder()
+a_data = a.fit(data).transform(data)
+df = pd.DataFrame(a_data, columns=a.columns_)
+df = df.replace(False, 0)
+df = df.replace(True, 1)
+df.head()
+
+# %% [markdown]
+# Now let's apply the apriori algorithm.
+
+# %%
+df = apriori(df, min_support = 0.2, use_colnames=True, verbose=1)
+df.head()
+
+# %% [markdown]
+# Now that one has the supports as well as the 
+
+# %%
+df_ar = association_rules(df, metric="confidence", min_threshold=0.5)
+df_ar
+
+# %% [markdown]
+# From the observation above, it seems that there is not any significant correlation in finance. The most one can obtain is that the probability of someone earning less than or equal to 50K given that they are HS-grad is 27.2%.
+
+
