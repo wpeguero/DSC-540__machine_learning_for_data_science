@@ -1,0 +1,152 @@
+# %% [markdown]
+# # Benchmark Ensemble
+# 
+# ## Wilson Peguero Rosario
+# 
+# Ensemble learning is a general approach where the combination of related methods provides better predictions or improves overall performance. Some real-world examples of its use include the Netflix Challenge, gene classification, image segmentation, and video retrieval.
+# 
+# In this assignment, you will implement ensemble learning, combining a variety of learning methods such as max voting, averaging, weighted averaging, bagging, boosting (gradient boosting, random forest, XGBoost, etc.), stacking, blending, and other variations.
+# 
+# You will have the freedom to choose between implementing classification or regression machine learning, or a combination of the two, so choose your ensemble techniques accordingly.
+# 
+# 1. Access the "UCI Machine Learning Repository," located in the topic Resources. Note: There are about 120 data sets that are suitable for use in a clustering task. For this part of the exercise, you must choose one of these datasets, provided it includes at least 10 attributes and 10,000 instances
+# 2. Ensure that the datasets are suitable for clustering using this method.
+# 3. You may search for data in other repositories, such as Data.gov or Kaggle.
+# 
+# For your selected dataset, build an ensemble model as follows:
+# 
+# 1. Explain the dataset and the type of information you wish to gain by applying an ensemble method.
+# 1. Explain the ensemble components and how you will be using it in your analysis (list the steps, intuition behind the mathematical representation, and address its assumptions). Specifically, which of max voting, averaging, weighted averaging, bagging, boosting (gradient boosting, random forest, XGBoost, etc.), stacking, blending, and/or other variations have you chosen, and why.
+# 1. Import necessary libraries, then read the dataset into a data frame and perform initial statistical exploration.
+# 1. Clean the data and address unusual phenomena (e.g., normalization, feature scaling, outliers); use illustrative diagrams and plots and explain them.
+# 1. Formulate two questions that can be answered by employing the ensemble learning
+# 1. If appropriate and relevant to your model, split the data into training and testing sets.
+# 1. Provide a diagram that illustrates how the ensemble components are combined into one learning model.
+# 1. Implement and execute the ensemble learning model. Explain the intuition behind each mathematical step.
+# 1. Answer the questions you formulated using the results obtained from executing the ensemble model.
+# 1. Interpret the predictions made by the model in the context of the questions you asked.
+# 1. Validate your model using relevant validation metrics such as a confusion matrix, accuracy score, ROC-AUC curves, and k-fold cross validation. Then, explain the results.
+# 1. Explain how ensemble system reduced the variance.
+# 1. Include all mathematical formulas used and graphs representing the final outcomes.
+# 
+# Prepare a comprehensive technical report as a markdown document or Jupyter notebook, including all code, code comments, all outputs, plots, and analysis. Make sure the project documentation contains a) problem statement, b) algorithm of the solution, c) analysis of the findings, and d) references.
+
+# %% [markdown]
+# ### Problem Statement
+# 
+# Currently, 99% (3.96 Billion) of four billion species that have ever lived on this earth have gone extinct. even now, there are currently multiple species that are at risk of becoming extinct. This provides one with an environment where there may be multiple variants of a single species that has gone extinct while unidentified. Through the use of genetic material and data on current living species, one is able to determine what the closest rewlative the extinct species may have currently alive. Knowing the relationship between extinct and current species allows one to understand how a species has come to adapt to it's environment (whether it be through regression or developing a new mutation that allowed the current species to thrive in it's environment).
+# 
+# From the codon usage dataset, one hopes to extract enough information to determine whether a certain species belongs to a certain type of species, family, kingom, etc. At the moment, the data set can provide one with the DNA Type of the species as well as the kingdom that the species belongs in.
+
+# %%
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score
+
+# %%
+df__codons = pd.read_csv(r'codon_usage_dataset/codon_usage.csv')
+df__codons.describe()
+
+# %%
+df__codons.columns
+
+# %% [markdown]
+# ### Data Processing
+# 
+# Now that the data has been uploaded, one should be able to process the data into a more functional format. The first change to make is convert the *Kingdom* feature into it's categorical version.
+
+# %%
+df__codons['Kingdom'] = pd.Categorical(df__codons['Kingdom'])
+dict__cat = dict(enumerate(df__codons['Kingdom'].cat.categories))
+df__codons['Kingdom'] = df__codons['Kingdom'].cat.codes
+
+# %% [markdown]
+# Now that the data is fully categorized, a correlation matrix can be created.
+
+# %%
+corr_matrix = df__codons.corr()
+corr_matrix\
+    .style\
+        .background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1)\
+            .format(precision=2)
+
+# %% [markdown]
+# Taking into account the above correlation matrix, one can observe that there is some clear autocorrelation between the explanatory variables as well as some very low correlation between the explanatory variables and the response variables (*Kingdom* and *DNAtype*). The next step is to divide the explanatory variables (codon concentrations) by the number of codons features (*Ncodons*).
+
+# %%
+df__codons = df__codons[pd.to_numeric(df__codons['UUU'], errors='coerce').notnull()]
+
+
+# %% [markdown]
+# Noticed that there 
+
+# %%
+df__codons['Ncodons'] = df__codons['Ncodons'].astype('float64')
+for (col, data) in df__codons.iteritems():
+    if col not in ('Kingdom', 'DNAtype', 'Ncodons', 'SpeciesID', 'SpeciesName'):
+        df__codons[col] = df__codons[col].astype('float64')
+        df__codons[col] = df__codons[col].div(df__codons['Ncodons'], axis=0)
+    else:
+        pass
+
+corr_matrix = df__codons.corr()
+corr_matrix\
+    .style\
+        .background_gradient(cmap='coolwarm', axis=None, vmin=-1, vmax=1)\
+            .format(precision=2)
+
+# %% [markdown]
+# Now that the data has been normalized better, one should be able to begin the data modeling process.
+# 
+# ### Data Modeling
+# 
+# Now that the fields have been normalized, The data will be split into the train and test versions of the data set.
+
+# %%
+y = df__codons['Kingdom']
+X = df__codons.drop(['Kingdom','DNAtype','SpeciesName'], axis=1)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3
+)
+
+# %% [markdown]
+# Now that the data is properly split, the model can be creating using the Gradient Boost algorithm as it maximizes the predictive accuracy of the model and very little processing time.
+
+# %%
+gbc = GradientBoostingClassifier(n_estimators=100).fit(X_train, y_train)
+
+# %% [markdown]
+# Now that the model has been created, one can extract predictions from the said model. these predictions can then be utilized to see how efficient the model is at determining the *Kingdom* that each species belongs in.
+
+# %%
+y_pred = gbc.predict(X_test)
+print(f'Accuracy                  :{accuracy_score(y_test, y_pred)}')
+print(f'error rate                :{1-accuracy_score(y_test,y_pred)}')
+print(f'precision                 :{precision_score(y_test,y_pred, average=None).mean()}')
+print(f'recall                    :{recall_score(y_test, y_pred, average=None).mean()}')
+
+# %% [markdown]
+# Using a simple decision tree, we obtain the following:
+
+# %%
+dtmodel = DecisionTreeClassifier(criterion='entropy').fit(X_train, y_train)
+y_simple_pred = dtmodel.predict(X_test)
+
+print(f'Accuracy                  :{accuracy_score(y_test, y_simple_pred)}')
+print(f'error rate                :{1-accuracy_score(y_test,y_simple_pred)}')
+print(f'precision                 :{precision_score(y_test,y_simple_pred, average=None).mean()}')
+print(f'recall                    :{recall_score(y_test, y_simple_pred, average=None).mean()}')
+
+# %% [markdown]
+# From this case, the ensemble method only improved the precision of the model significantly, albeit at the cost of having somehwat lower accuracy and recall capability. This may be deem a success in terms of appropriately labeling true positives, while on the other the fact that all other parameters did not significantly improve may warrant one to explore different models.
+
+# %% [markdown]
+# Source(s):
+# 
+# - https://ourworldindata.org/extinctions
+# - https://www.sciencedirect.com/science/article/abs/pii/S1673852721001855
+
+
